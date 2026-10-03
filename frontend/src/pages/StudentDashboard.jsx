@@ -154,8 +154,8 @@ export default function StudentDashboard() {
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-bold text-sky-800">Score: {submission.score || 0}</span>
                             <span className={`rounded-full px-3 py-1 text-xs font-bold ${submission.status === 'SUBMITTED_NORMAL' ? 'bg-emerald-100 text-emerald-800' : submission.status === 'DISQUALIFIED_CHEATING' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'}`}>{submission.status || 'SUBMITTED'}</span>
-                            <button type="button" onClick={() => toggleSubmissionDetails(submissionId)} className="rounded-lg bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 hover:bg-sky-100">
-                              {isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
+                            <button type="button" onClick={() => toggleSubmissionDetails(submissionId)} disabled={detailsLoading[submissionId]} className="rounded-lg bg-sky-50 px-3 py-2 text-xs font-bold text-sky-700 hover:bg-sky-100 disabled:cursor-wait disabled:opacity-60">
+                              {detailsLoading[submissionId] ? 'Loading details...' : isExpanded ? 'Hide Details ▲' : 'View Details ▼'}
                             </button>
                           </div>
                         </div>

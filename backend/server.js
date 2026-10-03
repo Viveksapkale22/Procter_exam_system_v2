@@ -6,6 +6,7 @@ require('dotenv').config();
 const { connectDB } = require('./config/db');
 const { initSocket } = require('./socket/socketHandler');
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
 const examRoutes = require('./routes/examRoutes');
 const submissionRoutes = require('./routes/submissionRoutes');
 const feedbackRoutes = require('./routes/feedbackRoutes');
@@ -72,6 +73,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/submissions', submissionRoutes);
 app.use('/api/feedback', feedbackRoutes);

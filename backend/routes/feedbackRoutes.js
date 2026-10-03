@@ -4,7 +4,7 @@ const { protect, requireAdmin } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
-router.post('/', createFeedback);
+router.post('/', protect, createFeedback);
 router.get('/', protect, requireAdmin, getFeedback);
 router.patch('/:feedbackId/read', protect, requireAdmin, markFeedbackRead);
 

@@ -5,6 +5,7 @@ import { io } from 'socket.io-client';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE, SOCKET_URL } from '../config/api';
 import FeedbackAdminView from '../components/FeedbackAdminView';
+import UserEditModal from '../components/UserEditModal';
 
 const createQuestionTemplate = () => ({
   questionText: '',
@@ -14,7 +15,7 @@ const createQuestionTemplate = () => ({
 });
 
 export default function AdminDashboard() {
-  const { user, token } = useAuth();
+  const { user, token, updateUser } = useAuth();
   const navigate = useNavigate();
 
   // Navigation State
@@ -36,6 +37,10 @@ export default function AdminDashboard() {
 
   // Data States
   const [exams, setExams] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [editingUserId, setEditingUserId] = useState(null);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const [pendingActions, setPendingActions] = useState({});
   const [rawSubmissions, setRawSubmissions] = useState([]);
   const [socketState, setSocketState] = useState('offline');
   const [expandedStudent, setExpandedStudent] = useState(null);
@@ -46,6 +51,10 @@ export default function AdminDashboard() {
   // Subject Accordion State
   const [expandedSubjects, setExpandedSubjects] = useState([]);
 
+  const setActionPending = (actionKey, isPending) => {
+    setPendingActions((previous) => ({ ...previous, [actionKey]: isPending }));
+  };
+
   useEffect(() => {
     if (!user || user.role !== 'admin') {
       navigate('/');
@@ -53,6 +62,7 @@ export default function AdminDashboard() {
     }
 
     fetchInitialData();
+    fetchUsers();
 
     const socket = io(SOCKET_URL, {
       auth: { token },
@@ -92,6 +102,18 @@ export default function AdminDashboard() {
       setRawSubmissions(feedResponse.data || []);
     } catch (error) {
       console.error('Data load failed', error);
+    }
+  };
+
+  const fetchUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      const response = await axios.get(`${API_BASE}/users`, { headers: { Authorization: `Bearer ${token}` } });
+      setUsers(response.data || []);
+    } catch (error) {
+      console.error('User load failed', error);
+    } finally {
+      setIsLoadingUsers(false);
     }
   };
 
@@ -228,6 +250,7 @@ export default function AdminDashboard() {
       return;
     }
 
+    setActionPending('save-exam', true);
     try {
       const payload = {
         title: examTitle.trim(),
@@ -254,11 +277,15 @@ export default function AdminDashboard() {
       setActiveTab('control');
     } catch (error) {
       alert(error.response?.data?.message || `Failed to ${editingExamId ? 'update' : 'create'} exam.`);
+    } finally {
+      setActionPending('save-exam', false);
     }
   };
 
   const deleteSubmission = async (submissionId) => {
     if (!window.confirm('Delete this submission permanently?')) return;
+    const actionKey = `delete-submission:${submissionId}`;
+    setActionPending(actionKey, true);
     try {
       await axios.delete(`${API_BASE}/submissions/${submissionId}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -267,11 +294,15 @@ export default function AdminDashboard() {
       setExpandedStudent((previous) => (previous === submissionId ? null : previous));
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to delete submission.');
+    } finally {
+      setActionPending(actionKey, false);
     }
   };
 
   const deleteSubjectSubmissions = async (subject, count) => {
     if (!window.confirm(`Delete all ${count} submission(s) for ${subject}? This cannot be undone.`)) return;
+    const actionKey = `delete-subject:${subject}`;
+    setActionPending(actionKey, true);
     try {
       await axios.delete(`${API_BASE}/submissions/subject/${encodeURIComponent(subject)}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -280,10 +311,14 @@ export default function AdminDashboard() {
       setExpandedSubjects((previous) => previous.filter((item) => item !== subject));
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to delete subject submissions.');
+    } finally {
+      setActionPending(actionKey, false);
     }
   };
 
   const toggleLock = async (examId) => {
+    const actionKey = `toggle-lock:${examId}`;
+    setActionPending(actionKey, true);
     try {
       const response = await axios.patch(
         `${API_BASE}/exams/${examId}/toggle-lock`,
@@ -302,11 +337,15 @@ export default function AdminDashboard() {
       );
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to toggle exam lock status.');
+    } finally {
+      setActionPending(actionKey, false);
     }
   };
 
   const deleteExam = async (examId) => {
     if (window.confirm('Are you sure you want to delete this exam?')) {
+      const actionKey = `delete-exam:${examId}`;
+      setActionPending(actionKey, true);
       try {
         await axios.delete(`${API_BASE}/exams/${examId}`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -314,9 +353,85 @@ export default function AdminDashboard() {
         setExams((prev) => prev.filter((exam) => exam._id !== examId));
       } catch (error) {
         alert(error.response?.data?.message || 'Failed to delete exam.');
+      } finally {
+        setActionPending(actionKey, false);
       }
     }
   };
+
+  const deleteUserAccount = async (userId) => {
+    if (!window.confirm('Delete this user account? This cannot be undone.')) return;
+    const actionKey = `delete-user:${userId}`;
+    setActionPending(actionKey, true);
+    try {
+      await axios.delete(`${API_BASE}/users/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setUsers((previous) => previous.filter((item) => String(item.id || item._id) !== String(userId)));
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to delete user.');
+    } finally {
+      setActionPending(actionKey, false);
+    }
+  };
+
+  const totalStudents = users.filter((item) => item.role === 'student').length;
+  const totalAdmins = users.filter((item) => item.role === 'admin').length;
+  const adminUsers = users.filter((item) => item.role === 'admin');
+  const studentUsers = users.filter((item) => item.role === 'student');
+
+  const renderUserTable = (accounts, emptyMessage) => accounts.length > 0 ? (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm text-slate-700">
+        <thead className="bg-slate-50">
+          <tr>
+            <th className="p-4 font-bold text-slate-800">Name</th>
+            <th className="p-4 font-bold text-slate-800">Email</th>
+            <th className="p-4 font-bold text-slate-800">Role</th>
+            <th className="p-4 font-bold text-slate-800">Branch</th>
+            <th className="p-4 font-bold text-slate-800">Roll</th>
+            <th className="p-4 font-bold text-slate-800">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {accounts.map((item) => (
+            <tr key={item.id || item._id} className="border-b border-slate-100 hover:bg-slate-50/80">
+              <td className="p-4 font-medium text-slate-900">{item.name}</td>
+              <td className="p-4">{item.email}</td>
+              <td className="p-4">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.role === 'admin' ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800'}`}>
+                  {item.role}
+                </span>
+              </td>
+              <td className="p-4">{item.branch || item.department || '—'}</td>
+              <td className="p-4">{item.rollNumber || '—'}</td>
+              <td className="p-4">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingUserId(item.id || item._id)}
+                    className="rounded-lg bg-sky-50 px-3 py-1.5 text-xs font-bold text-sky-800 hover:bg-sky-100"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteUserAccount(item.id || item._id)}
+                    disabled={item.role === 'admin' || pendingActions[`delete-user:${item.id || item._id}`]}
+                    className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {pendingActions[`delete-user:${item.id || item._id}`] ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <p className="py-6 text-center text-sm text-slate-500">{emptyMessage}</p>
+  );
 
   return (
     <div className="flex min-h-[80vh] gap-6">
@@ -356,6 +471,14 @@ export default function AdminDashboard() {
           Subject Submissions
         </button>
         <button
+          onClick={() => setActiveTab('users')}
+          className={`text-left p-3 rounded-xl font-medium transition-all ${
+            activeTab === 'users' ? 'bg-sky-600 text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'
+          }`}
+        >
+          User Management
+        </button>
+        <button
           onClick={() => setActiveTab('feedback')}
           className={`text-left p-3 rounded-xl font-medium transition-all ${
             activeTab === 'feedback' ? 'bg-sky-600 text-white shadow-md' : 'text-slate-700 hover:bg-slate-100'
@@ -367,6 +490,20 @@ export default function AdminDashboard() {
 
       {/* MAIN CONTENT AREA */}
       <div className="flex-1 space-y-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Total Users</p>
+            <p className="mt-3 text-3xl font-black text-slate-900">{users.length}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Students</p>
+            <p className="mt-3 text-3xl font-black text-emerald-600">{totalStudents}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Admins</p>
+            <p className="mt-3 text-3xl font-black text-sky-600">{totalAdmins}</p>
+          </div>
+        </div>
         {/* CREATE EXAM TAB */}
         {activeTab === 'create' && (
           <div className="card p-6 bg-white rounded-xl shadow-sm border border-slate-200">
@@ -498,9 +635,11 @@ export default function AdminDashboard() {
               <button
                 type="button"
                 onClick={saveExam}
-                className="w-1/2 rounded-xl bg-sky-600 px-4 py-3 font-bold text-white hover:bg-sky-700 transition-colors"
+                disabled={pendingActions['save-exam']}
+                aria-busy={Boolean(pendingActions['save-exam'])}
+                className="w-1/2 rounded-xl bg-sky-600 px-4 py-3 font-bold text-white hover:bg-sky-700 transition-colors disabled:cursor-wait disabled:opacity-60"
               >
-                {editingExamId ? 'Save Exam Changes' : 'Save & Publish Exam'}
+                {pendingActions['save-exam'] ? 'Saving exam...' : editingExamId ? 'Save Exam Changes' : 'Save & Publish Exam'}
               </button>
             </div>
           </div>
@@ -536,19 +675,21 @@ export default function AdminDashboard() {
                       </button>
                       <button
                         onClick={() => toggleLock(exam._id)}
+                        disabled={pendingActions[`toggle-lock:${exam._id}`]}
                         className={`rounded-lg px-5 py-2 font-bold text-white shadow-sm transition-colors ${
                           exam.isLocked
                             ? 'bg-rose-600 hover:bg-rose-700'
                             : 'bg-emerald-600 hover:bg-emerald-700'
                         }`}
                       >
-                        {exam.isLocked ? 'Locked' : 'Unlocked'}
+                        {pendingActions[`toggle-lock:${exam._id}`] ? 'Updating...' : exam.isLocked ? 'Locked' : 'Unlocked'}
                       </button>
                       <button
                         onClick={() => deleteExam(exam._id)}
-                        className="rounded-lg px-4 py-2 font-bold text-white bg-slate-800 hover:bg-slate-900 shadow-sm"
+                        disabled={pendingActions[`delete-exam:${exam._id}`]}
+                        className="rounded-lg px-4 py-2 font-bold text-white bg-slate-800 hover:bg-slate-900 shadow-sm disabled:cursor-wait disabled:opacity-60"
                       >
-                        Delete
+                        {pendingActions[`delete-exam:${exam._id}`] ? 'Deleting...' : 'Delete'}
                       </button>
                     </div>
                   </div>
@@ -634,9 +775,10 @@ export default function AdminDashboard() {
                             <button
                               type="button"
                               onClick={() => deleteSubjectSubmissions(subject, submissionsList.length)}
-                              className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700"
+                              disabled={pendingActions[`delete-subject:${subject}`]}
+                              className="shrink-0 rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:cursor-wait disabled:opacity-60"
                             >
-                              Delete Subject Data
+                              {pendingActions[`delete-subject:${subject}`] ? 'Deleting subject data...' : 'Delete Subject Data'}
                             </button>
                           </div>
                           <table className="w-full text-left text-sm text-slate-700">
@@ -681,20 +823,22 @@ export default function AdminDashboard() {
                                         <div className="flex items-center gap-2">
                                           <button
                                             onClick={() => toggleSubmissionDetails(subId)}
+                                            disabled={detailsLoading[subId]}
                                             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shadow-sm ${
                                               isExpanded
                                                 ? 'bg-slate-800 text-white'
                                                 : 'bg-sky-50 text-sky-700 hover:bg-sky-100'
                                             }`}
                                           >
-                                            {isExpanded ? 'Hide Info ▲' : 'View Info ▼'}
+                                            {detailsLoading[subId] ? 'Loading...' : isExpanded ? 'Hide Info ▲' : 'View Info ▼'}
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => deleteSubmission(subId)}
-                                            className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100"
+                                            disabled={pendingActions[`delete-submission:${subId}`]}
+                                            className="rounded-lg bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 disabled:cursor-wait disabled:opacity-60"
                                           >
-                                            Delete
+                                            {pendingActions[`delete-submission:${subId}`] ? 'Deleting...' : 'Delete'}
                                           </button>
                                         </div>
                                       </td>
@@ -721,27 +865,32 @@ export default function AdminDashboard() {
                                               )}
                                               {submissionDetails[subId] && (
                                                 <div className="space-y-2 text-xs">
-                                                  {submissionDetails[subId].answers?.map((ans, qIdx) => (
+                                                  {(submissionDetails[subId].questionResults || []).length === 0 && (
+                                                    <p className="py-3 text-sm text-slate-500">
+                                                      No question details are available for this submission.
+                                                    </p>
+                                                  )}
+                                                  {submissionDetails[subId].questionResults?.map((result, qIdx) => (
                                                     <div
-                                                      key={qIdx}
-                                                      className="p-3 border rounded-lg bg-slate-50 flex justify-between items-center"
+                                                      key={result.questionId || qIdx}
+                                                      className="p-3 border rounded-lg bg-slate-50 flex justify-between items-center gap-4"
                                                     >
                                                       <div>
                                                         <p className="font-bold text-slate-800">
-                                                          Q{qIdx + 1}: {ans.questionText || 'Question'}
+                                                          Q{qIdx + 1}: {result.questionText || 'Question'}
                                                         </p>
                                                         <p className="text-slate-600">
-                                                          Selected Option: {ans.selectedOption ?? 'N/A'}
+                                                          Selected Option: {result.options?.[result.selectedOption] ?? 'Not answered'}
                                                         </p>
                                                       </div>
                                                       <span
                                                         className={`font-bold px-2 py-1 rounded ${
-                                                          ans.isCorrect
+                                                          result.isCorrect
                                                             ? 'bg-emerald-100 text-emerald-700'
                                                             : 'bg-rose-100 text-rose-700'
                                                         }`}
                                                       >
-                                                        {ans.isCorrect ? 'Correct' : 'Incorrect'}
+                                                        {result.isCorrect ? 'Correct' : 'Incorrect'}
                                                       </span>
                                                     </div>
                                                   ))}
@@ -767,11 +916,59 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* USER MANAGEMENT TAB */}
+        {activeTab === 'users' && (
+          <div className="card p-6 bg-white rounded-xl shadow-sm border border-slate-200">
+            <div className="mb-6 flex items-center justify-between border-b pb-4">
+              <div>
+                <h3 className="text-2xl font-bold text-slate-800">User Management</h3>
+                <p className="mt-1 text-xs text-slate-500">Review account details, edit profile data, and remove users when needed.</p>
+              </div>
+              <span className="rounded-full bg-sky-100 px-3 py-1 text-sm font-bold text-sky-700">{users.length} users</span>
+            </div>
+
+            {isLoadingUsers ? (
+              <p role="status" className="py-10 text-center text-sm font-medium text-slate-500">Loading accounts...</p>
+            ) : <>
+            <section className="mb-8">
+              <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-3">
+                <h4 className="text-lg font-bold text-slate-900">Administrators</h4>
+                <span className="text-sm font-semibold text-slate-500">{totalAdmins}</span>
+              </div>
+              {renderUserTable(adminUsers, 'No administrator accounts found.')}
+            </section>
+
+            <section>
+              <div className="mb-3 flex items-center justify-between border-b border-slate-200 pb-3">
+                <h4 className="text-lg font-bold text-slate-900">Students</h4>
+                <span className="text-sm font-semibold text-slate-500">{totalStudents}</span>
+              </div>
+              {renderUserTable(studentUsers, 'No student accounts found.')}
+            </section>
+            </>}
+          </div>
+        )}
+
         {/* FEEDBACK TAB */}
         {activeTab === 'feedback' && (
           <FeedbackAdminView />
         )}
       </div>
+      {editingUserId && (
+        <UserEditModal
+          userId={editingUserId}
+          token={token}
+          onClose={() => setEditingUserId(null)}
+          onSaved={(updatedUser) => {
+            setUsers((previous) => previous.map((item) => (
+              String(item.id || item._id) === String(updatedUser.id) ? updatedUser : item
+            )));
+            if (String(user?.id || user?._id) === String(updatedUser.id)) {
+              updateUser(updatedUser);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

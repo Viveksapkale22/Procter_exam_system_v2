@@ -31,6 +31,7 @@ export default function ExamScreen() {
   const [examData, setExamData] = useState(() =>
     readStoredJson(`exam_${user?.id || 'anonymous'}_${examId}_session`)
   );
+  const [isStartingExam, setIsStartingExam] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -98,6 +99,7 @@ export default function ExamScreen() {
         return;
       }
 
+      setIsStartingExam(true);
       try {
         const response = await axios.get(`${API_BASE}/exams/${examId}/start`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -108,6 +110,8 @@ export default function ExamScreen() {
         if (savedTime === null) setTimeLeft(response.data.durationSeconds || 120);
       } catch (error) {
         setStatusMessage(error.response?.data?.message || 'Unable to start exam.');
+      } finally {
+        setIsStartingExam(false);
       }
     };
     fetchExam();
@@ -230,7 +234,10 @@ export default function ExamScreen() {
     return (
       <div className="card p-6 max-w-xl mx-auto mt-10 text-center">
         <h2 className="text-xl font-semibold mb-2">Exam Status</h2>
-        <p className="text-sm text-slate-600 font-medium">{statusMessage || 'Preparing your exam...'}</p>
+        <p role="status" className="text-sm text-slate-600 font-medium">
+          {isStartingExam && <span aria-hidden="true" className="mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-sky-600 border-r-transparent align-[-2px]" />}
+          {statusMessage || (isStartingExam ? 'Loading your exam...' : 'Preparing your exam...')}
+        </p>
         {statusMessage && <button onClick={() => navigate('/student')} className="mt-6 bg-slate-900 text-white px-6 py-2 rounded-lg">Return to Dashboard</button>}
       </div>
     );

@@ -8,6 +8,7 @@ export default function FeedbackAdminView() {
   const [feedbacks, setFeedbacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [markingId, setMarkingId] = useState('');
 
   const fetchFeedback = async () => {
     if (!token) return;
@@ -29,7 +30,8 @@ export default function FeedbackAdminView() {
   }, [token]);
 
   const handleMarkAsRead = async (feedbackId) => {
-    if (!token) return;
+    if (!token || markingId) return;
+    setMarkingId(feedbackId);
     try {
       const response = await axios.patch(
         `${API_BASE}/feedback/${feedbackId}/read`,
@@ -42,10 +44,12 @@ export default function FeedbackAdminView() {
       );
     } catch (err) {
       alert(err.response?.data?.message || 'Could not update feedback.');
+    } finally {
+      setMarkingId('');
     }
   };
 
-  if (loading) return <div className="p-4 text-slate-500">Loading feedback...</div>;
+  if (loading && feedbacks.length === 0) return <div role="status" className="p-4 text-slate-500">Loading feedback...</div>;
   if (error) return <div className="p-4 text-rose-600 font-medium">{error}</div>;
 
   return (
@@ -58,10 +62,12 @@ export default function FeedbackAdminView() {
           </p>
         </div>
         <button
+          type="button"
           onClick={fetchFeedback}
-          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+          disabled={loading}
+          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:cursor-wait disabled:opacity-60"
         >
-          Refresh
+          {loading ? 'Refreshing...' : 'Refresh'}
         </button>
       </div>
 
@@ -95,10 +101,12 @@ export default function FeedbackAdminView() {
 
                 {!item.isRead && (
                   <button
+                    type="button"
                     onClick={() => handleMarkAsRead(item._id)}
-                    className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                    disabled={Boolean(markingId)}
+                    className="rounded-lg bg-emerald-600 px-3 py-1 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-60"
                   >
-                    Mark as Read
+                    {markingId === item._id ? 'Saving...' : 'Mark as Read'}
                   </button>
                 )}
               </div>

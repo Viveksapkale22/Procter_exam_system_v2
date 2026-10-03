@@ -39,18 +39,26 @@ export function AuthProvider({ children }) {
     }
   }, [token]);
 
-  const login = ({ userData, authToken }) => {
+  const login = ({ userData, authToken, skipNavigation = false }) => {
     // Write synchronously so a refresh immediately after navigation cannot
     // race the React persistence effect.
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
     localStorage.setItem(TOKEN_KEY, authToken);
     setUser(userData);
     setToken(authToken);
+
+    if (skipNavigation) return;
+
     if (userData.role === 'admin') {
       navigate('/admin');
     } else {
       navigate('/student');
     }
+  };
+
+  const updateUser = (userData) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(userData));
+    setUser(userData);
   };
 
   const logout = () => {
@@ -62,7 +70,7 @@ export function AuthProvider({ children }) {
   };
 
   const value = useMemo(
-    () => ({ user, token, login, logout }),
+    () => ({ user, token, login, updateUser, logout }),
     [user, token]
   );
 

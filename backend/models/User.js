@@ -3,25 +3,37 @@ const mongoose = require('mongoose');
 const UserSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
-    rollNumber: { type: String, required: true, unique: true, trim: true },
-    department: { type: String, required: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+      unique: true,
+    },
+    password: { type: String, default: '' },
+    rollNumber: { type: String, default: '', trim: true },
+    branch: { type: String, default: '', trim: true },
+    department: { type: String, default: '', trim: true },
+    picture: { type: String, default: '' },
+    googleId: { type: String, default: '' },
+    authProvider: {
+      type: String,
+      enum: ['local', 'google'],
+      default: 'local',
+    },
     role: {
       type: String,
       enum: ['student', 'admin'],
       default: 'student',
     },
-    password: { type: String, required: true },
+    isProfileComplete: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
 UserSchema.pre('save', async function preSave(next) {
-  if (this.role === 'admin') {
-    const adminCount = await mongoose.models.User.countDocuments({ role: 'admin' });
-    if (this.isNew && adminCount > 0 && this.rollNumber !== (process.env.ADMIN_ROLL_NUMBER || 'ADMIN001')) {
-      const error = new Error('Only one admin account is allowed.');
-      return next(error);
-    }
+  if (!this.email) {
+    return next(new Error('User email is required.'));
   }
 
   next();
