@@ -1,4 +1,9 @@
-const defaultApiBase = 'http://localhost:5000/api';
+// Keep the local API convenient for `npm run dev`, while ensuring a Vercel
+// build never falls back to a server running on the visitor's own computer.
+// `VITE_API_BASE` remains available for preview/staging deployments.
+const defaultApiBase = import.meta.env.PROD
+  ? 'https://procter-exam-system-v2.onrender.com/api'
+  : 'http://localhost:5000/api';
 
 export const API_BASE = (import.meta.env.VITE_API_BASE || defaultApiBase).replace(/\/$/, '');
 
