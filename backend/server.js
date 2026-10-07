@@ -25,7 +25,8 @@ const allowedOrigins = [
   'http://localhost:5174',
   'https://procter-exam-system-v2.vercel.app',
   'https://test.vivek-22.tech',
-  'https://www.vivek-22.tech/'
+  'https://www.vivek-22.tech/',
+  'https://procter.vivek-22.tech'
 ];
 
 // FRONTEND_URL may contain one or more deployed frontend origins, separated by
