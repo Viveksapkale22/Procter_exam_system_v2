@@ -10,7 +10,7 @@ import FeedbackModal from './components/FeedbackModal';
 import ProfilePanel from './components/ProfilePanel';
 
 function AppShell() {
-  const { user, logout, updateUser } = useAuth();
+  const { user, token, logout, updateUser } = useAuth();
   const [showInstructions, setShowInstructions] = useState(true);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -32,15 +32,16 @@ function AppShell() {
             <Link to="/" className="text-lg font-bold tracking-wide">Proctor Exam</Link>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            {user ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setIsFeedbackOpen(true)}
-                  className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-400"
-                >
-                  Give Feedback
-                </button>
+            <>
+              <button
+                type="button"
+                onClick={() => setIsFeedbackOpen(true)}
+                className="rounded-lg bg-emerald-500 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-emerald-400"
+              >
+                Give Feedback
+              </button>
+              {user ? (
+                <>
                 <button
                   type="button"
                   onClick={() => setIsProfileOpen(true)}
@@ -67,8 +68,9 @@ function AppShell() {
                 >
                   Logout
                 </button>
-              </>
-            ) : null}
+                </>
+              ) : null}
+            </>
           </div>
         </div>
       </header>
@@ -82,7 +84,7 @@ function AppShell() {
           <Route path="/admin" element={<AdminDashboard />} />
         </Routes>
       </main>
-      {isFeedbackOpen && <FeedbackModal user={user} onClose={() => setIsFeedbackOpen(false)} />}
+      {isFeedbackOpen && <FeedbackModal user={user} token={token} onClose={() => setIsFeedbackOpen(false)} />}
       {isProfileOpen && user && (
         <ProfilePanel
           user={user}

@@ -36,12 +36,40 @@ export default function Login() {
   const [showInstructions, setShowInstructions] = useState(true);
   const [profileCompleteRequired, setProfileCompleteRequired] = useState(false);
   const [googleReady, setGoogleReady] = useState(false);
+  const [googleLoadFailed, setGoogleLoadFailed] = useState(false);
   const [accessType, setAccessType] = useState('student');
   const [studentFormMode, setStudentFormMode] = useState('login');
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
   useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-    setGoogleReady(Boolean(clientId));
+    if (!googleClientId) return undefined;
+
+    const googleScript = document.querySelector('script[src="https://accounts.google.com/gsi/client"]');
+    const markGoogleReady = () => {
+      if (window.google?.accounts?.id) {
+        setGoogleReady(true);
+      } else {
+        setGoogleLoadFailed(true);
+      }
+    };
+    const markGoogleLoadFailed = () => setGoogleLoadFailed(true);
+
+    if (window.google?.accounts?.id) {
+      setGoogleReady(true);
+      return undefined;
+    }
+
+    if (!googleScript) {
+      setGoogleLoadFailed(true);
+      return undefined;
+    }
+
+    googleScript.addEventListener('load', markGoogleReady);
+    googleScript.addEventListener('error', markGoogleLoadFailed);
+    return () => {
+      googleScript.removeEventListener('load', markGoogleReady);
+      googleScript.removeEventListener('error', markGoogleLoadFailed);
+    };
   }, []);
 
   const handleStudentChange = (event) => {
@@ -84,11 +112,10 @@ export default function Login() {
   };
 
   useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-    if (!clientId || !window.google) return;
+    if (!googleReady || !googleClientId || !window.google?.accounts?.id) return;
 
     window.google.accounts.id.initialize({
-      client_id: clientId,
+      client_id: googleClientId,
       callback: (response) => {
         const mode = accessType === 'admin' ? 'admin' : 'student';
         handleGoogleLogin(response.credential, mode);
@@ -116,7 +143,7 @@ export default function Login() {
         logo_alignment: 'left',
       });
     }
-  }, [accessType]);
+  }, [accessType, googleReady]);
 
   const handleStudentLogin = async (event) => {
     event.preventDefault();
@@ -272,15 +299,9 @@ export default function Login() {
                 <div id="student-google-signin-button" className={`flex justify-center ${studentLoading ? 'pointer-events-none opacity-50' : ''}`} />
               </div>
               {studentLoading && <p role="status" className="text-center text-sm font-medium text-sky-700">Signing in...</p>}
-              {!googleReady && (
-                <button
-                  type="button"
-                  onClick={() => setStudentError('Add VITE_GOOGLE_CLIENT_ID to frontend/.env to enable Google login.')}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  Continue with Google
-                </button>
-              )}
+              {!googleClientId && <p className="text-center text-sm text-amber-700">Google sign-in is not configured. Add VITE_GOOGLE_CLIENT_ID to frontend/.env.</p>}
+              {googleClientId && !googleReady && !googleLoadFailed && <p role="status" className="text-center text-sm text-slate-500">Loading Google sign-in...</p>}
+              {googleLoadFailed && <p role="alert" className="text-center text-sm text-rose-700">Google sign-in could not load. Check your connection and try again.</p>}
             </div>
 
             {studentFormMode === 'login' ? (
@@ -400,15 +421,9 @@ export default function Login() {
                 <div id="admin-google-signin-button" className={`flex justify-center ${adminLoading ? 'pointer-events-none opacity-50' : ''}`} />
               </div>
               {adminLoading && <p role="status" className="text-center text-sm font-medium text-sky-700">Signing in...</p>}
-              {!googleReady && (
-                <button
-                  type="button"
-                  onClick={() => setAdminError('Add VITE_GOOGLE_CLIENT_ID to frontend/.env to enable admin Google login.')}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50"
-                >
-                  Admin Google Login
-                </button>
-              )}
+              {!googleClientId && <p className="text-center text-sm text-amber-700">Google sign-in is not configured. Add VITE_GOOGLE_CLIENT_ID to frontend/.env.</p>}
+              {googleClientId && !googleReady && !googleLoadFailed && <p role="status" className="text-center text-sm text-slate-500">Loading Google sign-in...</p>}
+              {googleLoadFailed && <p role="alert" className="text-center text-sm text-rose-700">Google sign-in could not load. Check your connection and try again.</p>}
             </div>
 
             <form onSubmit={handleAdminLogin} className="space-y-4">
